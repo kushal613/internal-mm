@@ -1,0 +1,33 @@
+{
+  "name": "convallax-mm",
+  "version": "0.1.0",
+  "description": "Independent market-maker bot for Convallax (options on Polymarket prediction markets)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "tsx src/scripts/setup.ts",
+    "approve": "tsx src/scripts/setup.ts --approve",
+    "faucet": "tsx src/scripts/setup.ts --faucet",
+    "mint": "tsx src/scripts/mint.ts",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
+    "ws": "^8.21.0"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
