@@ -7,7 +7,7 @@ import {
   getWallet,
   readOnchainStatus,
 } from "./onchain/usdc.js";
-import { NaivePlaceholderEngine } from "./pricing/engine.js";
+import { LogitDiffusionEngine } from "./pricing/logitMC.js";
 import { formatUnits6 } from "./pricing/math.js";
 import { ConvallaxRest } from "./rest/client.js";
 import { Confirmer } from "./services/confirmer.js";
@@ -34,7 +34,10 @@ async function main(): Promise<void> {
   const apiKey = requireApiKey();
   const rest = new ConvallaxRest({ apiKey });
   const store = new QuoteStore();
-  const engine = new NaivePlaceholderEngine();
+  const engine = new LogitDiffusionEngine({
+    sigmab: 1.5,       // annualized belief-vol in logit space
+    halfSpread: 0.02,  // 2% half-spread (4% round-trip)
+  });
 
   log.info("starting Convallax MM", {
     makerId: MAKER_ID,

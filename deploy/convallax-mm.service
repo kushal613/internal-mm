@@ -1,0 +1,27 @@
+# systemd unit for the Convallax market maker.
+# Copy to /etc/systemd/system/convallax-mm.service and edit paths/user before enabling.
+#
+# See deploy/DEPLOY.md for full setup instructions.
+
+[Unit]
+Description=Convallax Market Maker (24/7)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mm
+Group=mm
+WorkingDirectory=/home/mm/internal-mm
+EnvironmentFile=/home/mm/internal-mm/.env
+Environment=LOG_JSON=1
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=10
+
+# Give the process time to close SSE/WS cleanly on shutdown.
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

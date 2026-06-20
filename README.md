@@ -62,7 +62,7 @@ Other modules:
 
    You also need Amoy POL for gas — fund the wallet from the Polygon Amoy faucet.
 
-## Run
+## Run locally
 
 The runtime mode depends on whether `MM_PRIVATE_KEY` is set:
 
@@ -78,6 +78,12 @@ npm run typecheck
 > Before running live, ensure the wallet has Amoy POL + testnet USDC and both USDC
 > approvals are set (`npm run approve`). The bot runs an on-chain preflight at
 > startup and warns if approvals/balances are missing.
+
+## Run 24/7 (cloud server)
+
+To keep quoting when your laptop is off, run the bot on a small VPS with
+**systemd** (auto-restart + survive reboots). Step-by-step instructions for
+non-engineers: **[deploy/DEPLOY.md](deploy/DEPLOY.md)**.
 
 ## Phase status
 
