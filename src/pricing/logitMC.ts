@@ -210,9 +210,18 @@ export class LogitDiffusionEngine implements PricingEngine {
 
     if (!Number.isFinite(fair) || fair <= 0) return undefined;
 
+    // Economic dominance bound: beyond this price, buying the underlying
+    // (YES for calls, NO for puts) strictly dominates buying the option
+    // for every possible S_T. No rational taker should pay more.
+    //   Call: S₀ · (1 - K)     Put: (1 - S₀) · K
+    const domBound = isCall ? p0 * (1 - strike) : (1 - p0) * strike;
+    fair = Math.min(fair, domBound);
+    if (fair <= 0) return undefined;
+
     // ── Quote price = fair ± spread, clamped to no-arb bounds ──
     const quoted = this.applySpread(fair, trade.side);
-    const price = clampPrice(quoted, option.optionType, strikeBps);
+    const capped = Math.min(quoted, domBound);
+    const price = clampPrice(capped, option.optionType, strikeBps);
     if (!Number.isFinite(price)) return undefined;
 
     // ── Size ──
