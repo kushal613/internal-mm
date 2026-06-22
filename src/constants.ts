@@ -12,10 +12,10 @@ export const MAKER_ID = "mm_37a2449f4b" as const;
 
 /** Deployed contract addresses on Polygon Amoy. */
 export const CONTRACTS = {
-  core: "0x5bcE81D59b755628700D94166FE98cb17014dE3f",
-  optionToken: "0x829b67148Aa07c4B3EE275Ce24ddb74CDeF671Bb",
-  settlement: "0x721C428fb5a5468698C295dD4DC2D7bE06479f21",
-  usdc: "0x3e21ecaeeb968eeD34690a93Bbb92032ffe5CF9e",
+  core: "0x76c41a03e0993F0261bB3B1949320cA693f76faE",
+  optionToken: "0x68a45fFc7d5282665ffa01Ec04ff133a4384F7e1",
+  settlement: "0x3E583BC44157c91F8c534372A3e91c371841107A",
+  usdc: "0xCc544B615B244Cf59A7cB6Cb7d7119ef73A485E5",
 } as const;
 
 /** REST + streaming paths (relative to API_BASE / WS_BASE). */
