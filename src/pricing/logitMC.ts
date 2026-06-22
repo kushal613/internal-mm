@@ -152,7 +152,13 @@ export interface LogitDiffusionConfig {
   sigmab?: number;
   /** Half the quoted spread around fair value (in price units, e.g. 0.02 = 2%). */
   halfSpread?: number;
-  /** Hard cap on contracts per quote. */
+  /**
+   * Capital (whole USDC) we back a single quote's depth with. Depth is
+   * `floor(depthCapitalUsd / maxPayoutPerContract)` — i.e. the most contracts we
+   * could fully collateralize at the worst case for that option.
+   */
+  depthCapitalUsd?: number;
+  /** Optional hard cap on contracts per quote (defaults to no cap beyond capital). */
   maxContracts?: number;
   /** MC simulation paths (more = slower but less noise). */
   mcPaths?: number;
@@ -163,6 +169,7 @@ export interface LogitDiffusionConfig {
 export class LogitDiffusionEngine implements PricingEngine {
   private readonly sigmab: number;
   private readonly halfSpread: number;
+  private readonly depthCapitalUsd: number;
   private readonly maxContracts: number;
   private readonly mcPaths: number;
   private readonly mcStepsPerYear: number;
@@ -170,6 +177,7 @@ export class LogitDiffusionEngine implements PricingEngine {
   constructor(cfg: LogitDiffusionConfig = {}) {
     this.sigmab = cfg.sigmab ?? 1.5;
     this.halfSpread = cfg.halfSpread ?? 0.02;
+    this.depthCapitalUsd = cfg.depthCapitalUsd ?? 100_000_000;
     this.maxContracts = cfg.maxContracts ?? Number.POSITIVE_INFINITY;
     this.mcPaths = cfg.mcPaths ?? 10_000;
     this.mcStepsPerYear = cfg.mcStepsPerYear ?? 500;
@@ -225,7 +233,7 @@ export class LogitDiffusionEngine implements PricingEngine {
     if (!Number.isFinite(price)) return undefined;
 
     // ── Size ──
-    const size = this.sizeFor(trade, price);
+    const size = this.sizeFor(trade, option);
     if (!Number.isFinite(size) || size < 1) return undefined;
 
     return {
@@ -253,19 +261,31 @@ export class LogitDiffusionEngine implements PricingEngine {
     return side === "buy" ? fair + this.halfSpread : fair - this.halfSpread;
   }
 
-  private sizeFor(trade: QuoteRequestTrade, price: number): number {
-    if (trade.side === "buy") {
-      const budget = Number(trade.budgetUsd);
-      if (Number.isFinite(budget) && budget > 0 && price > 0) {
-        return Math.min(Math.floor(budget / price), this.maxContracts);
-      }
-      const legacy = Number(trade.size);
-      if (Number.isFinite(legacy) && legacy >= 1) {
-        return Math.min(Math.floor(legacy), this.maxContracts);
-      }
-      return 0;
-    }
-    const size = Number(trade.size);
-    return Number.isFinite(size) ? Math.floor(size) : 0;
+  private sizeFor(trade: QuoteRequestTrade, option: QuoteRequestOption): number {
+    const depth = this.maxDepth(option);
+    // Buys: quote our full available depth, independent of the taker's budget.
+    // Convallax does not re-open the RFQ when the user adjusts the amount, so
+    // sizing off budgetUsd would freeze the fill at the initial budget. They cap
+    // the taker's fill at this number instead.
+    if (trade.side === "buy") return depth;
+    // Sells: the taker submits a contract count; take the full requested size,
+    // bounded by our depth.
+    const requested = Number(trade.size);
+    if (!Number.isFinite(requested)) return 0;
+    return Math.min(Math.floor(requested), depth);
+  }
+
+  /**
+   * Max contracts we can fully collateralize for this option:
+   *   depth = floor(depthCapitalUsd / maxPayoutPerContract)
+   * where maxPayoutPerContract = (1 − K) for calls, K for puts (the writer's
+   * worst-case payout, in USDC). With our (mock) capital this is effectively
+   * unbounded, so it's further bounded by the optional maxContracts cap.
+   */
+  private maxDepth(option: QuoteRequestOption): number {
+    const payoutPerContract = noArbMaxPrice(option.optionType, Number(option.strikeBps));
+    if (!(payoutPerContract > 0)) return 0;
+    const byCapital = Math.floor(this.depthCapitalUsd / payoutPerContract);
+    return Math.min(byCapital, this.maxContracts);
   }
 }

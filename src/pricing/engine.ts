@@ -12,7 +12,12 @@ import { normalizeOptionType, type OptionType, type QuoteRequestOption, type Quo
 export interface QuoteDecision {
   /** Price per option in (0,1). undefined => do not quote. */
   price: number;
-  /** Whole options to quote (must be >= 50% of requested size to be valid). */
+  /**
+   * Max depth (whole contracts) we're willing to write at this price.
+   * For buys this is our available depth, independent of the taker's budget —
+   * the relay caps the taker's fill at this number. For sells it must be
+   * >= 50% of the requested size to be a valid quote.
+   */
   size: number;
   fairValue?: number;
   spreadBps?: number;

@@ -37,6 +37,9 @@ async function main(): Promise<void> {
   const engine = new LogitDiffusionEngine({
     sigmab: 1.5,       // annualized belief-vol in logit space
     halfSpread: 0.02,  // 2% half-spread (4% round-trip)
+    // We hold 100M mock USDC, so depth is effectively unbounded — quote our full
+    // collateralizable depth on every request (relay caps the taker's fill at it).
+    depthCapitalUsd: 100_000_000,
   });
 
   log.info("starting Convallax MM", {
