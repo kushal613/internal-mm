@@ -20,11 +20,12 @@
 import { clampPrice, noArbMaxPrice } from "./math.js";
 import {
   normalizeOptionType,
+  type QuoteRequestMarket,
   type QuoteRequestOption,
   type QuoteRequestTrade,
   type Side,
 } from "../types.js";
-import type { PricingEngine, QuoteDecision } from "./engine.js";
+import { resolveYesPrice, type PricingEngine, type QuoteDecision } from "./engine.js";
 
 // ────────────────────────────────────────────────────────────
 //  Logit / sigmoid helpers
@@ -184,9 +185,11 @@ export class LogitDiffusionEngine implements PricingEngine {
   }
 
   decide({
+    market,
     option,
     trade,
   }: {
+    market: QuoteRequestMarket;
     option: QuoteRequestOption;
     trade: QuoteRequestTrade;
   }): QuoteDecision | undefined {
@@ -197,10 +200,12 @@ export class LogitDiffusionEngine implements PricingEngine {
     const isCall = type === "call";
     const strike = strikeBps / 100;
 
-    // Current YES price (assume up-to-date per protocol design).
-    let p0 = Number(option.currentYesPrice);
-    if (!Number.isFinite(p0)) p0 = 0.5;
-    p0 = Math.min(Math.max(p0, 1e-6), 1 - 1e-6);
+    // Underlying YES spot. The relay sends it as `market.yesPrice`. Without a
+    // real spot we cannot price — decline rather than assume 50/50 (a 0.5 guess
+    // makes every put on a low-probability market look deep OTM and never quote).
+    const spot = resolveYesPrice(market, option);
+    if (spot === undefined) return undefined;
+    const p0 = Math.min(Math.max(spot, 1e-6), 1 - 1e-6);
 
     // Time to expiry.
     const tauYears = this.computeTau(option);

@@ -1,5 +1,33 @@
 import { clampPrice, noArbMaxPrice } from "./math.js";
-import { normalizeOptionType, type OptionType, type QuoteRequestOption, type QuoteRequestTrade, type Side } from "../types.js";
+import {
+  normalizeOptionType,
+  type OptionType,
+  type QuoteRequestMarket,
+  type QuoteRequestOption,
+  type QuoteRequestTrade,
+  type Side,
+} from "../types.js";
+
+/**
+ * Resolve the underlying YES spot for pricing.
+ *
+ * The relay delivers spot as `market.yesPrice`; older payloads (and our tests)
+ * may carry it as `option.currentYesPrice`. Returns undefined when neither is a
+ * usable probability — callers MUST decline to quote rather than fabricate a
+ * spot. (Defaulting to 0.5 silently mis-prices every series: on a low-probability
+ * market it makes calls look deep ITM and puts deep OTM, so puts never quote.)
+ */
+export function resolveYesPrice(
+  market: QuoteRequestMarket | undefined,
+  option: QuoteRequestOption,
+): number | undefined {
+  const candidates = [market?.yesPrice, option.currentYesPrice];
+  for (const c of candidates) {
+    const v = Number(c);
+    if (Number.isFinite(v) && v > 0 && v < 1) return v;
+  }
+  return undefined;
+}
 
 /**
  * Pricing engine interface.
@@ -25,6 +53,7 @@ export interface QuoteDecision {
 
 export interface PricingEngine {
   decide(input: {
+    market: QuoteRequestMarket;
     option: QuoteRequestOption;
     trade: QuoteRequestTrade;
   }): QuoteDecision | undefined;
@@ -46,17 +75,23 @@ export class NaivePlaceholderEngine implements PricingEngine {
     private readonly maxContracts = Number.POSITIVE_INFINITY,
   ) {}
 
-  decide({ option, trade }: { option: QuoteRequestOption; trade: QuoteRequestTrade }):
-    | QuoteDecision
-    | undefined {
+  decide({ market, option, trade }: {
+    market: QuoteRequestMarket;
+    option: QuoteRequestOption;
+    trade: QuoteRequestTrade;
+  }): QuoteDecision | undefined {
     // strikeBps defines the no-arb bound; if it's unusable we cannot price safely.
     const strikeBps = Number(option.strikeBps);
     if (!Number.isFinite(strikeBps) || strikeBps <= 0 || strikeBps >= 100) return undefined;
 
+    // No usable spot => decline (never fabricate a 50/50, which mis-prices puts).
+    const yesPrice = resolveYesPrice(market, option);
+    if (yesPrice === undefined) return undefined;
+
     const type = normalizeOptionType(option.optionType);
     const max = noArbMaxPrice(type, strikeBps); // 1-K (call) or K (put), in (0,1)
 
-    const fair = this.fairValue(type, strikeBps, option.currentYesPrice, max);
+    const fair = this.fairValue(type, strikeBps, yesPrice, max);
     const price = clampPrice(this.applySpread(fair, trade.side), option.optionType, strikeBps);
     if (!Number.isFinite(price)) return undefined; // belt-and-suspenders
 

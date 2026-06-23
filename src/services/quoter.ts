@@ -24,9 +24,9 @@ export class Quoter {
   ) {}
 
   async onQuoteRequest(req: QuoteRequestEvent): Promise<void> {
-    const { option, trade } = req.params;
+    const { market, option, trade } = req.params;
 
-    const decision = this.engine.decide({ option, trade });
+    const decision = this.engine.decide({ market, option, trade });
     if (!decision) {
       log.debug("engine declined to quote", { requestId: req.requestId });
       return;

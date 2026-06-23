@@ -11,6 +11,12 @@ export interface QuoteRequestMarket {
   conditionId: string;
   yesTokenId: string;
   question: string;
+  /**
+   * Current Polymarket YES price (the underlying spot, in (0,1)). This is the
+   * canonical spot the relay sends and the primary input to our pricing model.
+   * NOTE: the relay delivers spot here under `market`, NOT under `option`.
+   */
+  yesPrice?: number;
 }
 
 /**
@@ -23,8 +29,14 @@ export interface QuoteRequestOption {
   expiryMs: number;
   /** Same expiry as `expiryMs`, as an ISO 8601 string. */
   expiry?: string;
+  /** Strike as a fraction in (0,1), i.e. strikeBps / 100. Informational. */
+  strike?: number;
   tauDays?: number;
   sigmaL?: number;
+  /**
+   * Legacy/optional spot hint. The relay currently sends spot as
+   * `market.yesPrice`; this is kept only as a back-compat fallback.
+   */
   currentYesPrice?: number;
   isResolutionExpiry?: boolean;
 }
