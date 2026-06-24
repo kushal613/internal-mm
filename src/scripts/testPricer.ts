@@ -11,7 +11,7 @@ const market: QuoteRequestMarket = {
   question: "test",
 };
 
-const engine = new LogitDiffusionEngine({ sigmab: 1.5, halfSpread: 0, mcPaths: 50_000 });
+const engine = new LogitDiffusionEngine({ sigmab: 5.0, spreadFrac: 0, mcPaths: 50_000 });
 
 function test(
   label: string,

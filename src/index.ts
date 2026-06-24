@@ -35,10 +35,9 @@ async function main(): Promise<void> {
   const rest = new ConvallaxRest({ apiKey });
   const store = new QuoteStore();
   const engine = new LogitDiffusionEngine({
-    sigmab: 1.5,       // annualized belief-vol in logit space
-    halfSpread: 0.02,  // 2% half-spread (4% round-trip)
-    // We hold 100M mock USDC, so depth is effectively unbounded — quote our full
-    // collateralizable depth on every request (relay caps the taker's fill at it).
+    sigmab: 5.0,         // annualized belief-vol in logit space (~8% daily p moves at p=0.5)
+    spreadFrac: 0.10,    // 10% proportional half-spread (scales with option value)
+    spreadFloor: 0.002,  // minimum half-spread floor (0.2 cents)
     depthCapitalUsd: 100_000_000,
   });
 

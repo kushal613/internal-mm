@@ -151,8 +151,17 @@ const MS_PER_YEAR = 365.25 * 24 * 3600 * 1000;
 export interface LogitDiffusionConfig {
   /** Annualized belief-volatility in logit space (σ_b per √year). */
   sigmab?: number;
-  /** Half the quoted spread around fair value (in price units, e.g. 0.02 = 2%). */
-  halfSpread?: number;
+  /**
+   * Proportional half-spread as a fraction of fair value (e.g. 0.10 = 10%).
+   * The quoted spread scales with the option value, so OTM options keep a
+   * reasonable bid/ask instead of being swamped by a fixed-cent spread.
+   */
+  spreadFrac?: number;
+  /**
+   * Absolute minimum half-spread in price units — floor so that near-zero
+   * fair values still have a non-trivial spread (e.g. 0.002 = 0.2 cents).
+   */
+  spreadFloor?: number;
   /**
    * Capital (whole USDC) we back a single quote's depth with. Depth is
    * `floor(depthCapitalUsd / maxPayoutPerContract)` — i.e. the most contracts we
@@ -165,23 +174,33 @@ export interface LogitDiffusionConfig {
   mcPaths?: number;
   /** Target Euler steps per year of τ (actual steps = clamp(τ · this, 10, 200)). */
   mcStepsPerYear?: number;
+  /**
+   * Minimum price we will ever quote (in price units). Guarantees that even a
+   * (near-)worthless deep-OTM series still gets a small but valid quote instead
+   * of being declined. Always kept strictly below the no-arb bound.
+   */
+  minPrice?: number;
 }
 
 export class LogitDiffusionEngine implements PricingEngine {
   private readonly sigmab: number;
-  private readonly halfSpread: number;
+  private readonly spreadFrac: number;
+  private readonly spreadFloor: number;
   private readonly depthCapitalUsd: number;
   private readonly maxContracts: number;
   private readonly mcPaths: number;
   private readonly mcStepsPerYear: number;
+  private readonly minPrice: number;
 
   constructor(cfg: LogitDiffusionConfig = {}) {
-    this.sigmab = cfg.sigmab ?? 1.5;
-    this.halfSpread = cfg.halfSpread ?? 0.02;
+    this.sigmab = cfg.sigmab ?? 5.0;
+    this.spreadFrac = cfg.spreadFrac ?? 0.10;
+    this.spreadFloor = cfg.spreadFloor ?? 0.002;
     this.depthCapitalUsd = cfg.depthCapitalUsd ?? 100_000_000;
     this.maxContracts = cfg.maxContracts ?? Number.POSITIVE_INFINITY;
     this.mcPaths = cfg.mcPaths ?? 10_000;
     this.mcStepsPerYear = cfg.mcStepsPerYear ?? 500;
+    this.minPrice = cfg.minPrice ?? 0.001;
   }
 
   decide({
@@ -221,7 +240,12 @@ export class LogitDiffusionEngine implements PricingEngine {
       fair = mc.fairValue;
     }
 
-    if (!Number.isFinite(fair) || fair <= 0) return undefined;
+    // A deep-OTM option can have a (near-)zero fair value — that is NOT a reason
+    // to decline. Floor it to 0 and let the spread + minPrice floor below produce
+    // a small but valid quote. We only bail on genuinely unpriceable inputs
+    // (bad strike, missing spot, expired τ — all handled above).
+    if (!Number.isFinite(fair)) fair = 0;
+    fair = Math.max(0, fair);
 
     // Economic dominance bound: beyond this price, buying the underlying
     // (YES for calls, NO for puts) strictly dominates buying the option
@@ -229,23 +253,29 @@ export class LogitDiffusionEngine implements PricingEngine {
     //   Call: S₀ · (1 - K)     Put: (1 - S₀) · K
     const domBound = isCall ? p0 * (1 - strike) : (1 - p0) * strike;
     fair = Math.min(fair, domBound);
-    if (fair <= 0) return undefined;
 
     // ── Quote price = fair ± spread, clamped to no-arb bounds ──
     const quoted = this.applySpread(fair, trade.side);
     const capped = Math.min(quoted, domBound);
-    const price = clampPrice(capped, option.optionType, strikeBps);
+    let price = clampPrice(capped, option.optionType, strikeBps);
     if (!Number.isFinite(price)) return undefined;
+
+    // Always present a tradeable quote: floor to minPrice (cheap for deep-OTM),
+    // but never at/above the no-arb max (1−K for calls, K for puts).
+    const noArbMax = noArbMaxPrice(option.optionType, strikeBps);
+    price = Math.min(Math.max(price, this.minPrice), noArbMax - 1e-6);
+    if (!(price > 0 && price < 1)) return undefined;
 
     // ── Size ──
     const size = this.sizeFor(trade, option);
     if (!Number.isFinite(size) || size < 1) return undefined;
 
+    const halfSpread = Math.max(fair * this.spreadFrac, this.spreadFloor);
     return {
       price,
       size,
       fairValue: fair,
-      spreadBps: Math.round(this.halfSpread * 2 * 10_000),
+      spreadBps: Math.round(halfSpread * 2 * 10_000),
     };
   }
 
@@ -263,7 +293,8 @@ export class LogitDiffusionEngine implements PricingEngine {
   }
 
   private applySpread(fair: number, side: Side): number {
-    return side === "buy" ? fair + this.halfSpread : fair - this.halfSpread;
+    const halfSpread = Math.max(fair * this.spreadFrac, this.spreadFloor);
+    return side === "buy" ? fair + halfSpread : fair - halfSpread;
   }
 
   private sizeFor(trade: QuoteRequestTrade, option: QuoteRequestOption): number {
