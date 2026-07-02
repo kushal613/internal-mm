@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import { createLogger } from "../logger.js";
 import type { PricingEngine } from "../pricing/engine.js";
 import { clampPrice, noArbMaxPrice } from "../pricing/math.js";
@@ -24,6 +25,11 @@ export class Quoter {
   ) {}
 
   async onQuoteRequest(req: QuoteRequestEvent): Promise<void> {
+    if (config.pauseQuoting) {
+      log.debug("quoting paused — skipping", { requestId: req.requestId });
+      return;
+    }
+
     const { market, option, trade } = req.params;
 
     const decision = this.engine.decide({ market, option, trade });

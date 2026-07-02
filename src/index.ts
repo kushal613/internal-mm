@@ -62,7 +62,13 @@ async function main(): Promise<void> {
     quoter = new Quoter(rest, store, engine, wallet.address);
     confirmer = new Confirmer(rest, store, wallet);
     await preflight(wallet);
-    log.info("LIVE quoting mode enabled", { maker: wallet.address });
+    if (config.pauseQuoting) {
+      log.warn("PAUSED — quoting disabled via PAUSE_QUOTING=1 (SSE/WS still connected, confirmer active)", {
+        maker: wallet.address,
+      });
+    } else {
+      log.info("LIVE quoting mode enabled", { maker: wallet.address });
+    }
   } else {
     log.warn("MM_PRIVATE_KEY not set — READ-ONLY mode (no quotes submitted)");
   }

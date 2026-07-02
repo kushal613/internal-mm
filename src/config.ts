@@ -17,6 +17,7 @@ export interface Config {
   wsBase: string;
   rpcUrl: string;
   expectedMakerWallet: string;
+  pauseQuoting: boolean;
 }
 
 function clean(v: string | undefined): string | undefined {
@@ -31,6 +32,7 @@ export const config: Config = {
   wsBase: clean(process.env.WS_BASE) ?? "wss://api.convallax.com",
   rpcUrl: clean(process.env.RPC_URL) ?? "https://rpc-amoy.polygon.technology",
   expectedMakerWallet: EXPECTED_MAKER_WALLET,
+  pauseQuoting: clean(process.env.PAUSE_QUOTING) === "1",
 };
 
 export function requireApiKey(): string {
